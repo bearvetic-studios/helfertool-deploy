@@ -2,3 +2,5 @@
 /config/
 /storage/
 /backups/
+/.restore.*/
+__pycache__/

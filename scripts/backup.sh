@@ -1,17 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
-if [[ ! -f .env ]]; then
-    echo "Missing .env; copy .env.example to .env first." >&2
-    exit 1
-fi
-
-COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" --env-file "$ROOT/.env")
-BACKUP_DIR="$ROOT/backups"
-mkdir -p "$BACKUP_DIR"
+source "$(dirname -- "${BASH_SOURCE[0]}")/deployment.sh"
+umask 077
+mkdir -p -- "$BACKUP_DIR"
 chmod 0700 "$BACKUP_DIR"
 
 if [[ $# -gt 1 ]]; then
@@ -25,6 +17,16 @@ else
     ARCHIVE="$BACKUP_DIR/helfertool-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
 fi
 mkdir -p -- "$(dirname -- "$ARCHIVE")"
+if [[ -e "$ARCHIVE" ]]; then
+    echo "Backup already exists; choose a different archive name: $ARCHIVE" >&2
+    exit 1
+fi
+ARCHIVE_DIRECTORY="$(cd -- "$(dirname -- "$ARCHIVE")" && pwd)"
+if [[ "$ARCHIVE_DIRECTORY" == "$STORAGE" || "$ARCHIVE_DIRECTORY" == "$STORAGE/"* ]]; then
+    echo "Backup archives must be outside HELFERTOOL_STORAGE_PATH." >&2
+    exit 1
+fi
+TEMP_ARCHIVE="$(mktemp "$ARCHIVE_DIRECTORY/.helfertool-backup.XXXXXX")"
 
 RUNNING_SERVICES="$("${COMPOSE[@]}" ps --services --status running)"
 restart_services() {
@@ -33,11 +35,19 @@ restart_services() {
         "${COMPOSE[@]}" start "${services[@]}" >/dev/null
     fi
 }
-trap restart_services EXIT
+cleanup() {
+    rm -f -- "$TEMP_ARCHIVE"
+    restart_services
+}
+trap cleanup EXIT
 
 "${COMPOSE[@]}" stop helfertool postgres rabbitmq
-tar --numeric-owner -czf "$ARCHIVE" -C "$ROOT" config/helfertool.yaml storage/data storage/postgres storage/rabbitmq
-chmod 0600 "$ARCHIVE"
+tar --numeric-owner --transform='s,^\(data\|postgres\|rabbitmq\)\(/\|$\),storage/\1\2,' \
+    --transform='s,^\.env$,config/deployment.env,' \
+    -czf "$TEMP_ARCHIVE" -C "$ROOT" config/helfertool.yaml .env -C "$STORAGE" data postgres rabbitmq
+chmod 0600 "$TEMP_ARCHIVE"
+ln -- "$TEMP_ARCHIVE" "$ARCHIVE"
+rm -f -- "$TEMP_ARCHIVE"
 restart_services
 trap - EXIT
 echo "Backup written to $ARCHIVE"

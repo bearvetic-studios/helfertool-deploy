@@ -1,22 +1,15 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
 if [[ $# -ne 1 ]]; then
     echo "Usage: $0 backup-file.tar.gz" >&2
     exit 2
 fi
-if [[ ! -f .env ]]; then
-    echo "Missing .env; copy .env.example to .env and set the original database and broker credentials." >&2
-    exit 1
-fi
 
 ARCHIVE="$(realpath -- "$1")"
-COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" --env-file "$ROOT/.env")
-STORAGE="$ROOT/storage"
-mkdir -p "$STORAGE"
+source "$(dirname -- "${BASH_SOURCE[0]}")/deployment.sh"
+umask 077
+mkdir -p -- "$STORAGE"
 printf 'Restore %s and replace the current data, PostgreSQL and RabbitMQ state? Type RESTORE to continue: ' "$ARCHIVE"
 read -r CONFIRMATION
 if [[ "$CONFIRMATION" != RESTORE ]]; then
@@ -90,17 +83,18 @@ with tarfile.open(archive_path, "r:gz") as archive:
         if name.startswith("/") or any(part in ("", ".", "..") for part in parts):
             raise SystemExit(f"Unsafe archive path: {member.name}")
         if parts[0] == "config":
-            valid = name == "config" or name == "config/helfertool.yaml"
-            root = "config/helfertool.yaml"
+            valid = (name == "config" and member.isdir()) or (name in ("config/helfertool.yaml", "config/deployment.env") and member.isfile())
+            root = "config/helfertool.yaml" if name == "config/helfertool.yaml" else ""
         elif parts[0] == "storage" and len(parts) >= 2 and parts[1] in ("data", "postgres", "rabbitmq"):
-            valid = name in ("storage/data", "storage/postgres", "storage/rabbitmq") or len(parts) > 2
+            valid = (name in ("storage/data", "storage/postgres", "storage/rabbitmq") and member.isdir()) or len(parts) > 2
             root = "storage/" + parts[1]
         else:
             valid = False
             root = ""
         if not valid or not (member.isdir() or member.isfile()):
             raise SystemExit(f"Unexpected archive entry: {member.name}")
-        seen_roots.add(root)
+        if root:
+            seen_roots.add(root)
     if seen_roots != allowed:
         raise SystemExit("Archive must contain the Helfertool config, data, PostgreSQL and RabbitMQ directories.")
 
@@ -121,7 +115,9 @@ with tarfile.open(archive_path, "r:gz") as archive:
                     if not chunk:
                         break
                     output.write(chunk)
-            os.chmod(target, member.mode & 0o777)
+            os.chmod(target, 0o600 if name.startswith("config/") else member.mode & 0o777)
+        if os.geteuid() == 0:
+            os.chown(target, member.uid, member.gid)
 PY
 
 STORAGE_STAGING="$(mktemp -d "$STORAGE/.restore.XXXXXX")"
@@ -153,4 +149,7 @@ CONFIG_NEW_MOVED=true
 "${COMPOSE[@]}" up -d helfertool
 RESTORE_COMPLETE=true
 SERVICES_STOPPED=false
-echo "Restore complete. The deployment .env file was not included; it must match the backed-up database and broker credentials."
+echo "Restore complete. The active .env was preserved; its database and broker credentials must match the backup."
+if [[ -f "$ROOT/config/deployment.env" ]]; then
+    echo "The backed-up .env is available at config/deployment.env; compare credentials without overwriting this host's paths."
+fi

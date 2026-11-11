@@ -9,9 +9,9 @@ services:
       - chown -R 10001:10001 /data /log /runtime /config && chmod 0750 /config && chmod 0600 /config/helfertool.yaml
     volumes:
       - ./config:/config
-      - ./storage/data:/data
-      - ./storage/log:/log
-      - ./storage/run:/runtime
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/data:/data
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/log:/log
+      - helfertool-runtime:/runtime
 
   postgres:
     image: postgres:17-alpine
@@ -21,7 +21,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - ./storage/postgres:/var/lib/postgresql/data
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
@@ -37,7 +37,7 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:?Set RABBITMQ_VHOST in .env}
     volumes:
-      - ./storage/rabbitmq:/var/lib/rabbitmq
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -59,12 +59,18 @@ services:
       - "${HELFERTOOL_BIND_ADDRESS:-127.0.0.1}:${HELFERTOOL_PORT:-8080}:8000"
     volumes:
       - ./config:/config:ro
-      - ./storage/data:/data
-      - ./storage/log:/log
-      - ./storage/run:/helfertool/run
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/data:/data
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/log:/log
+      - helfertool-runtime:/helfertool/run
+      - ./scripts/healthcheck.sh:/usr/local/bin/helfertool-healthcheck:ro
     healthcheck:
-      test: ["CMD", "/usr/local/bin/healthcheck"]
+      test: ["CMD", "bash", "/usr/local/bin/helfertool-healthcheck"]
       interval: 30s
       timeout: 30s
       retries: 3
       start_period: 60s
+
+volumes:
+  helfertool-runtime:
+
+x-backup-path: ${HELFERTOOL_BACKUP_PATH:-./backups}
