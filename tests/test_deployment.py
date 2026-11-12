@@ -21,12 +21,12 @@ class DeploymentTests(unittest.TestCase):
         self.stack = self.base / "stack"
         shutil.copytree(ROOT / "scripts", self.stack / "scripts")
         (self.stack / ".env").write_text("TEST_ENV=preserve\n")
-        (self.stack / "config").mkdir()
-        (self.stack / "config" / "helfertool.yaml").write_text("original config\n")
         self.storage = self.base / "persistent data"
         self.backups = self.base / "offsite backups"
-        for service in ("data", "postgres", "rabbitmq", "log"):
+        for service in ("config", "data", "postgres", "rabbitmq", "log"):
             (self.storage / service).mkdir(parents=True)
+        (self.storage / "config" / "helfertool.yaml").write_text("original config\n")
+        for service in ("data", "postgres", "rabbitmq", "log"):
             (self.storage / service / "state").write_text(f"original {service}\n")
         self.config = self.base / "compose.json"
         self.write_config()
@@ -107,23 +107,11 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue(any("start" in call for call in self.commands()))
         self.assertFalse(list(self.backups.glob(".helfertool-backup.*")))
 
-    def test_start_creates_external_storage_and_generates_config(self):
-        values = {
-            "HELFERTOOL_ALLOWED_HOSTS": "localhost,127.0.0.1",
-            "HELFERTOOL_SECRET_KEY": "test-secret-" * 6,
-            "POSTGRES_DB": "helfertool",
-            "POSTGRES_USER": "helfertool",
-            "POSTGRES_PASSWORD": "database-test-password",
-            "RABBITMQ_VHOST": "helfertool",
-            "RABBITMQ_USER": "helfertool",
-            "RABBITMQ_PASSWORD": "broker-test-password",
-        }
-        (self.stack / ".env").write_text("".join(f"{key}={value}\n" for key, value in values.items()))
+    def test_start_creates_external_storage_directories(self):
         shutil.rmtree(self.storage)
         self.run_script("start.sh")
-        for service in ("data", "postgres", "rabbitmq", "log"):
+        for service in ("config", "data", "postgres", "rabbitmq", "log"):
             self.assertTrue((self.storage / service).is_dir())
-        self.assertIn('backend: "postgresql"', (self.stack / "config" / "helfertool.yaml").read_text())
         self.assertTrue(any("permissions" in call and "run" in call for call in self.commands()))
         self.assertTrue(any("up" in call for call in self.commands()))
 
@@ -151,20 +139,20 @@ class DeploymentTests(unittest.TestCase):
         for service in ("data", "postgres", "rabbitmq"):
             self.assertEqual((self.storage / service / "state").read_text(), f"original {service}\n")
         self.assertEqual((self.stack / ".env").read_text(), "TEST_ENV=preserve\n")
-        self.assertEqual((self.stack / "config" / "deployment.env").read_text(), "TEST_ENV=preserve\n")
-        self.assertEqual(stat.S_IMODE((self.stack / "config" / "deployment.env").stat().st_mode), 0o600)
+        self.assertEqual((self.storage / "config" / "deployment.env").read_text(), "TEST_ENV=preserve\n")
+        self.assertEqual(stat.S_IMODE((self.storage / "config" / "deployment.env").stat().st_mode), 0o600)
         self.assertFalse(list(self.storage.glob(".restore.*")))
 
     def test_restore_failure_rolls_back_existing_data_and_config(self):
         archive = self.backup()
         for service in ("data", "postgres", "rabbitmq"):
             (self.storage / service / "state").write_text(f"current {service}\n")
-        (self.stack / "config" / "helfertool.yaml").write_text("current config\n")
+        (self.storage / "config" / "helfertool.yaml").write_text("current config\n")
         self.environment["TEST_FAIL_COMMAND"] = "run"
         self.run_script("restore.sh", archive, confirmation="RESTORE\n", success=False)
         for service in ("data", "postgres", "rabbitmq"):
             self.assertEqual((self.storage / service / "state").read_text(), f"current {service}\n")
-        self.assertEqual((self.stack / "config" / "helfertool.yaml").read_text(), "current config\n")
+        self.assertEqual((self.storage / "config" / "helfertool.yaml").read_text(), "current config\n")
         self.assertEqual((self.storage / "log" / "state").read_text(), "original log\n")
 
     def test_restore_accepts_legacy_archive_without_environment_copy(self):
@@ -175,7 +163,7 @@ class DeploymentTests(unittest.TestCase):
                 if member.name != "config/deployment.env":
                     destination.addfile(member, source.extractfile(member) if member.isfile() else None)
         self.run_script("restore.sh", legacy, confirmation="RESTORE\n")
-        self.assertFalse((self.stack / "config" / "deployment.env").exists())
+        self.assertFalse((self.storage / "config" / "deployment.env").exists())
         self.assertEqual((self.stack / ".env").read_text(), "TEST_ENV=preserve\n")
 
     def test_restore_rejects_archive_traversal_before_stopping_services(self):

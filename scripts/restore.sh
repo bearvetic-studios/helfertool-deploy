@@ -28,11 +28,11 @@ CONFIG_NEW_MOVED=false
 cleanup() {
     local cleanup_failed=false
     if [[ "$RESTORE_COMPLETE" != true ]]; then
-        if [[ "$CONFIG_NEW_MOVED" == true && -e "$ROOT/config" ]]; then
-            rm -rf -- "$ROOT/config" || cleanup_failed=true
+        if [[ "$CONFIG_NEW_MOVED" == true && -e "$STORAGE/config" ]]; then
+            rm -rf -- "$STORAGE/config" || cleanup_failed=true
         fi
         if [[ "$CONFIG_OLD_MOVED" == true ]]; then
-            mv -- "$STAGING/previous/config" "$ROOT/config" || cleanup_failed=true
+            mv -- "$STAGING/previous/config" "$STORAGE/config" || cleanup_failed=true
         fi
         for service in rabbitmq postgres data; do
             if [[ "${NEW_MOVED[$service]:-false}" == true && -e "$STORAGE/$service" ]]; then
@@ -137,11 +137,11 @@ for service in data postgres rabbitmq; do
     mv -- "$STORAGE_STAGING/new-$service" "$STORAGE/$service"
     NEW_MOVED[$service]=true
 done
-if [[ -e "$ROOT/config" ]]; then
-    mv -- "$ROOT/config" "$STAGING/previous/config"
+if [[ -e "$STORAGE/config" ]]; then
+    mv -- "$STORAGE/config" "$STAGING/previous/config"
     CONFIG_OLD_MOVED=true
 fi
-mv -- "$STAGING/config" "$ROOT/config"
+mv -- "$STAGING/config" "$STORAGE/config"
 CONFIG_NEW_MOVED=true
 
 "${COMPOSE[@]}" run --rm --no-deps permissions
@@ -150,6 +150,6 @@ CONFIG_NEW_MOVED=true
 RESTORE_COMPLETE=true
 SERVICES_STOPPED=false
 echo "Restore complete. The active .env was preserved; its database and broker credentials must match the backup."
-if [[ -f "$ROOT/config/deployment.env" ]]; then
-    echo "The backed-up .env is available at config/deployment.env; compare credentials without overwriting this host's paths."
+if [[ -f "$STORAGE/config/deployment.env" ]]; then
+    echo "The backed-up .env is available at $STORAGE/config/deployment.env; compare credentials without overwriting this host's paths."
 fi

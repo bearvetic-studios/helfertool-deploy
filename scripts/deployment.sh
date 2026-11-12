@@ -9,7 +9,7 @@ if [[ ! -f .env ]]; then
     exit 1
 fi
 
-COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" --env-file "$ROOT/.env")
+COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" -f "$ROOT/compose.bind-storage.yaml" --env-file "$ROOT/.env")
 DEPLOYMENT_PATHS="$("${COMPOSE[@]}" config --format json | python3 -c '
 import json
 import sys

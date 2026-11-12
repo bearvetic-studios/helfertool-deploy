@@ -1,0 +1,23 @@
+services:
+  permissions:
+    volumes:
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/config:/config
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/data:/data
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/log:/log
+      - helfertool-runtime:/runtime
+
+  postgres:
+    volumes:
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/postgres:/var/lib/postgresql/data
+
+  rabbitmq:
+    volumes:
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/rabbitmq:/var/lib/rabbitmq
+
+  helfertool:
+    volumes:
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/config:/config
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/data:/data
+      - ${HELFERTOOL_STORAGE_PATH:-./storage}/log:/log
+      - helfertool-runtime:/helfertool/run
+

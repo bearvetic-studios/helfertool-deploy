@@ -44,7 +44,7 @@ trap cleanup EXIT
 "${COMPOSE[@]}" stop helfertool postgres rabbitmq
 tar --numeric-owner --transform='s,^\(data\|postgres\|rabbitmq\)\(/\|$\),storage/\1\2,' \
     --transform='s,^\.env$,config/deployment.env,' \
-    -czf "$TEMP_ARCHIVE" -C "$ROOT" config/helfertool.yaml .env -C "$STORAGE" data postgres rabbitmq
+    -czf "$TEMP_ARCHIVE" -C "$ROOT" .env -C "$STORAGE" config/helfertool.yaml data postgres rabbitmq
 chmod 0600 "$TEMP_ARCHIVE"
 ln -- "$TEMP_ARCHIVE" "$ARCHIVE"
 rm -f -- "$TEMP_ARCHIVE"

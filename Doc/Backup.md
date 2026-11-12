@@ -17,7 +17,7 @@ Ein Backup enthaelt:
 
 | Archiveintrag | Inhalt |
 | --- | --- |
-| `config/helfertool.yaml` | Anwendungs-, Mail- und Zugangskonfiguration |
+| `config/helfertool.yaml` | Generierte Anwendungs-, Mail- und Zugangskonfiguration aus `$HELFERTOOL_STORAGE_PATH/config` |
 | `config/deployment.env` | Kopie der `.env` mit Passwoertern, Secret-Key und Deployment-Einstellungen |
 | `storage/data` | Uploads und persistente Anwendungsdateien |
 | `storage/postgres` | Vollstaendiger PostgreSQL-Datenbestand |
