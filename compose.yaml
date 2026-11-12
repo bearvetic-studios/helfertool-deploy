@@ -1,0 +1,101 @@
+services:
+  permissions:
+    image: busybox:1.37
+    user: "0:0"
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - mkdir -p /data /log /runtime /config && chown -R 10001:10001 /data /log /runtime /config && chmod 0750 /config
+    volumes:
+      - helfertool-config:/config
+      - helfertool-data:/data
+      - helfertool-log:/log
+      - helfertool-runtime:/runtime
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - helfertool-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set RABBITMQ_USER in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:?Set RABBITMQ_VHOST in .env}
+    volumes:
+      - helfertool-rabbitmq:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  helfertool:
+    image: ${HELFERTOOL_IMAGE:-ghcr.io/bearvetic-studios/helfertool:latest}
+    restart: unless-stopped
+    depends_on:
+      permissions:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      HELFERTOOL_ALLOWED_HOSTS: ${HELFERTOOL_ALLOWED_HOSTS:?Set HELFERTOOL_ALLOWED_HOSTS in .env}
+      HELFERTOOL_SECRET_KEY: ${HELFERTOOL_SECRET_KEY:?Set HELFERTOOL_SECRET_KEY in .env}
+      HELFERTOOL_BEHIND_PROXY: ${HELFERTOOL_BEHIND_PROXY:-true}
+      HELFERTOOL_LANGUAGE: ${HELFERTOOL_LANGUAGE:-de}
+      HELFERTOOL_TIMEZONE: ${HELFERTOOL_TIMEZONE:-Europe/Zurich}
+      HELFERTOOL_ADMIN_USER: ${HELFERTOOL_ADMIN_USER:-}
+      HELFERTOOL_ADMIN_EMAIL: ${HELFERTOOL_ADMIN_EMAIL:-}
+      HELFERTOOL_ADMIN_PASSWORD: ${HELFERTOOL_ADMIN_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      RABBITMQ_VHOST: ${RABBITMQ_VHOST:?Set RABBITMQ_VHOST in .env}
+      RABBITMQ_USER: ${RABBITMQ_USER:?Set RABBITMQ_USER in .env}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+    ports:
+      - "${HELFERTOOL_BIND_ADDRESS:-127.0.0.1}:${HELFERTOOL_PORT:-8080}:8000"
+    volumes:
+      - helfertool-config:/config
+      - helfertool-data:/data
+      - helfertool-log:/log
+      - helfertool-runtime:/helfertool/run
+    healthcheck:
+      test: ["CMD", "bash", "/usr/local/bin/helfertool-healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  helfertool-config:
+  helfertool-data:
+  helfertool-log:
+  helfertool-postgres:
+  helfertool-rabbitmq:
+  helfertool-runtime:
+
+x-backup-path: ${HELFERTOOL_BACKUP_PATH:-./backups}
