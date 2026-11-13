@@ -1,0 +1,15 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+COPY relay/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt \
+    && useradd --uid 10001 --user-group --no-create-home relay \
+    && mkdir /data && chown relay:relay /data && chmod 0700 /data
+
+COPY relay/graph_relay.py /app/graph_relay.py
+USER 10001:10001
+EXPOSE 8025
+ENTRYPOINT ["python", "/app/graph_relay.py"]
+CMD ["serve"]

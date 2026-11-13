@@ -87,6 +87,15 @@ def build_config_lines(env: dict[str, str]) -> list[str]:
     lines.extend(f"        - {yaml_string(host)}" for host in hosts)
 
     smtp_host = env.get("SMTP_HOST", "").strip()
+    sender_address = env.get("SMTP_SENDER_ADDRESS", "").strip()
+    sender_name = env.get("SMTP_SENDER_NAME", "").strip()
+    if smtp_host or sender_address or sender_name:
+        lines.append("mail:")
+        if sender_address:
+            lines.append(f"    sender_address: {yaml_string(sender_address)}")
+        if sender_name:
+            lines.append(f"    sender_name: {yaml_string(sender_name)}")
+
     if smtp_host:
         if PLACEHOLDER_RE.search(smtp_host):
             raise ValueError("SMTP_HOST still contains a placeholder; set a real value or leave it empty.")
@@ -100,7 +109,6 @@ def build_config_lines(env: dict[str, str]) -> list[str]:
         smtp_tls = parse_bool(env.get("SMTP_TLS", "false"), False)
         smtp_starttls = parse_bool(env.get("SMTP_STARTTLS", "true"), True)
         lines.extend([
-            "mail:",
             "    send:",
             f"        host: {yaml_string(smtp_host)}",
             f"        port: {smtp_port}",
