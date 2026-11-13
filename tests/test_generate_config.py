@@ -51,6 +51,43 @@ class GenerateConfigTests(unittest.TestCase):
         self.assertIn('user: "noreply@bearvetic.ch"', content)
         self.assertIn("tls: false", content)
         self.assertIn("starttls: true", content)
+        self.assertNotIn("sender_address:", content)
+        self.assertNotIn("sender_name:", content)
+
+    def test_generates_sender_at_mail_level_independently_of_smtp_login(self):
+        env = self.base_env()
+        env.update({
+            "SMTP_HOST": "smtp-relay",
+            "SMTP_USER": "login@example.org",
+            "SMTP_SENDER_ADDRESS": " helfer@example.org ",
+            "SMTP_SENDER_NAME": ' Helfer: "Team" ',
+        })
+        lines = generate_config.build_config_lines(env)
+        mail_start = lines.index("mail:")
+        self.assertEqual(lines[mail_start:mail_start + 4], [
+            "mail:",
+            '    sender_address: "helfer@example.org"',
+            '    sender_name: "Helfer: \\"Team\\""',
+            "    send:",
+        ])
+        self.assertIn('        user: "login@example.org"', lines)
+
+    def test_sender_settings_work_without_smtp_host(self):
+        for settings, expected in (
+            ({"SMTP_SENDER_ADDRESS": "helfer@example.org"},
+             '    sender_address: "helfer@example.org"'),
+            ({"SMTP_SENDER_NAME": "Helfertool"}, '    sender_name: "Helfertool"'),
+        ):
+            with self.subTest(settings=settings):
+                lines = generate_config.build_config_lines({**self.base_env(), **settings})
+                self.assertIn("mail:", lines)
+                self.assertIn(expected, lines)
+                self.assertNotIn("    send:", lines)
+
+    def test_blank_sender_settings_preserve_defaults(self):
+        env = self.base_env()
+        env.update({"SMTP_SENDER_ADDRESS": "  ", "SMTP_SENDER_NAME": ""})
+        self.assertNotIn("mail:", generate_config.build_config_lines(env))
 
     def test_rejects_placeholders_and_short_secret(self):
         env = self.base_env()

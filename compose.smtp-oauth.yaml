@@ -1,0 +1,52 @@
+services:
+  helfertool:
+    environment:
+      SMTP_HOST: smtp-relay
+      SMTP_PORT: "8025"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      SMTP_TLS: "false"
+      SMTP_STARTTLS: "false"
+      SMTP_SENDER_ADDRESS: ${SMTP_SENDER_ADDRESS:?Set SMTP_SENDER_ADDRESS in .env}
+    depends_on:
+      smtp-relay:
+        condition: service_healthy
+    networks:
+      - default
+      - smtp-internal
+
+  smtp-relay:
+    image: ${SMTP_RELAY_IMAGE:-ghcr.io/bearvetic-studios/helfertool-smtp-graph:latest}
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      OAUTH_TENANT_ID: ${OAUTH_TENANT_ID:?Set OAUTH_TENANT_ID in .env}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:?Set OAUTH_CLIENT_ID in .env}
+      OAUTH_USERNAME: ${OAUTH_USERNAME:?Set OAUTH_USERNAME in .env}
+      SMTP_SENDER_ADDRESS: ${SMTP_SENDER_ADDRESS:?Set SMTP_SENDER_ADDRESS in .env}
+      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-}
+    volumes:
+      - smtp-relay-tokens:/data
+    networks:
+      - smtp-internal
+      - smtp-egress
+    healthcheck:
+      test: ["CMD", "python", "/app/graph_relay.py", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  smtp-internal:
+    internal: true
+  smtp-egress:
+
+volumes:
+  smtp-relay-tokens:
